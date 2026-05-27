@@ -11,6 +11,8 @@
 #include "usage_rate.h"
 #include "idle.h"
 #include "idle_cfg.h"
+#include "sound.h"
+#include "event.h"
 
 #include "hal/board_caps.h"
 #include "hal/display_hal.h"
@@ -109,6 +111,7 @@ static bool parse_json(const char* json, UsageData* out) {
     out->weekly_pct = doc["w"] | 0.0f;
     out->weekly_reset_mins = doc["wr"] | -1;
     strlcpy(out->status, doc["st"] | "unknown", sizeof(out->status));
+    strlcpy(out->account, doc["ac"] | "", sizeof(out->account));
     out->ok = doc["ok"] | false;
     out->valid = true;
     return true;
@@ -163,6 +166,12 @@ static void check_serial_cmd() {
         if (c == '\n' || c == '\r') {
             cmd_buf[cmd_pos] = '\0';
             if (strcmp(cmd_buf, "screenshot") == 0) send_screenshot();
+            // Sound test commands: snd0..snd5
+            else if (strncmp(cmd_buf, "snd", 3) == 0 && cmd_buf[3] >= '0' && cmd_buf[3] <= '5') {
+                int id = cmd_buf[3] - '0';
+                Serial.printf("Playing sound %d\n", id);
+                sound_play((sound_id_t)id);
+            }
             cmd_pos = 0;
         } else if (cmd_pos < CMD_BUF_SIZE - 1) {
             cmd_buf[cmd_pos++] = c;
@@ -220,6 +229,9 @@ void setup() {
     ui_update_battery(power_hal_battery_pct(), power_hal_is_charging());
     ui_show_screen(SCREEN_SPLASH);
 
+    sound_init();
+    event_init();
+
     Serial.printf("Dashboard ready (%s, %dx%d), waiting for data on BLE...\n",
         board_caps().name, W, H);
 }
@@ -234,6 +246,7 @@ void loop() {
     power_hal_tick();
     imu_hal_tick();
     splash_tick();
+    event_tick();
     // Rotation transition (blank + ramp) would fight the idle fade — skip
     // ticks while the panel is dark. A rotation that happens during sleep
     // is detected by the next tick after wake and ramped in then.
@@ -241,7 +254,7 @@ void loop() {
 
     // ---- Physical buttons ----
     //   PRIMARY   → HID Space  (Claude Code voice-mode PTT)
-    //   SECONDARY → HID Shift+Tab  (mode toggle; only if the board has one)
+    //   SECONDARY → BLE account switch (cycles daemon between configured accounts)
     //   PWR       → cycle screens; on splash, cycle animations
     // First press from sleep is consumed as a wake-only event by
     // idle_consume_wake_press(); the normal action fires from the second
@@ -269,10 +282,9 @@ void loop() {
             if (secondary_now != secondary_was) {
                 if (secondary_now) {
                     if (idle_consume_wake_press()) secondary_wake_swallowed = true;
-                    else                            ble_keyboard_press(0x2B, 0x02);  // HID Tab + LEFT_SHIFT
+                    else                            ble_request_switch();
                 } else {
-                    if (secondary_wake_swallowed) secondary_wake_swallowed = false;
-                    else                          ble_keyboard_release();
+                    secondary_wake_swallowed = false;
                 }
                 secondary_was = secondary_now;
             }

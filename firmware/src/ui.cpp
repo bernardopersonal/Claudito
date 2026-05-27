@@ -1,8 +1,10 @@
 #include "ui.h"
 #include "splash.h"
 #include <lvgl.h>
+#include <string.h>
 #include "logo.h"
 #include "icons.h"
+#include "idoctus_logo.h"
 #include "hal/board_caps.h"
 
 // Custom fonts (scaled for 314 PPI, ~1.9x from original 165 PPI)
@@ -111,6 +113,9 @@ static lv_obj_t* lbl_weekly_pct;
 static lv_obj_t* lbl_weekly_label;
 static lv_obj_t* lbl_weekly_reset;
 static lv_obj_t* lbl_anim;
+static lv_obj_t* lbl_account;
+static lv_obj_t* idoctus_img;
+static lv_image_dsc_t idoctus_dsc;
 
 // ---- Bluetooth screen widgets ----
 static lv_obj_t* ble_container;
@@ -127,6 +132,9 @@ static lv_image_dsc_t battery_dscs[5];  // empty, low, medium, full, charging
 static lv_image_dsc_t logo_dsc;
 static screen_t current_screen = SCREEN_USAGE;
 
+// Activity state
+static activity_state_t activity = ACTIVITY_IDLE;
+
 // Animation state
 static uint32_t anim_last_ms = 0;
 static uint8_t anim_spinner_idx = 0;
@@ -134,6 +142,19 @@ static uint8_t anim_phase = 0;
 static uint8_t anim_msg_idx = 0;
 static uint32_t anim_msg_start = 0;
 #define ANIM_MSG_MS     4000
+
+// Idle messages — rotate when Claude is not actively working
+static const char* const idle_messages[] = {
+    "Stopped",
+    "Token hungry",
+    "Idle",
+    "Resting",
+    "On standby",
+};
+#define IDLE_MSG_COUNT (sizeof(idle_messages) / sizeof(idle_messages[0]))
+static uint8_t idle_msg_idx = 0;
+static uint32_t idle_msg_start = 0;
+#define IDLE_MSG_MS  5000
 
 static const char* const spinner_frames[] = {
     "\xC2\xB7", "\xE2\x9C\xBB", "\xE2\x9C\xBD",
@@ -182,8 +203,9 @@ static const char* const anim_messages[] = {
 #define ANIM_MSG_COUNT (sizeof(anim_messages) / sizeof(anim_messages[0]))
 
 static lv_color_t pct_color(float pct) {
-    if (pct >= 80.0f) return COL_RED;
-    if (pct >= 50.0f) return COL_AMBER;
+    if (pct >= 90.0f) return COL_RED;
+    if (pct >= 70.0f) return THEME_ORANGE;
+    if (pct >= 40.0f) return THEME_YELLOW;
     return COL_GREEN;
 }
 
@@ -325,6 +347,12 @@ static void init_usage_screen(lv_obj_t* scr) {
                      &lbl_weekly_pct, &lbl_weekly_label,
                      &bar_weekly, &lbl_weekly_reset);
 
+    lbl_account = lv_label_create(usage_container);
+    lv_label_set_text(lbl_account, "");
+    lv_obj_set_style_text_font(lbl_account, &font_styrene_20, 0);
+    lv_obj_set_style_text_color(lbl_account, COL_DIM, 0);
+    lv_obj_align(lbl_account, LV_ALIGN_BOTTOM_MID, 0, -50);
+
     lbl_anim = lv_label_create(usage_container);
     lv_label_set_text(lbl_anim, "");
     lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);
@@ -427,6 +455,7 @@ void ui_init(void) {
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     init_icon_dsc_rgb565a8(&logo_dsc, LOGO_WIDTH, LOGO_HEIGHT, logo_data);
+    init_icon_dsc_rgb565a8(&idoctus_dsc, IDOCTUS_LOGO_W, IDOCTUS_LOGO_H, idoctus_logo_data);
     init_battery_icons();
 
     init_usage_screen(scr);
@@ -440,6 +469,11 @@ void ui_init(void) {
     logo_img = lv_image_create(scr);
     lv_image_set_src(logo_img, &logo_dsc);
     lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
+
+    idoctus_img = lv_image_create(scr);
+    lv_image_set_src(idoctus_img, &idoctus_dsc);
+    lv_obj_set_pos(idoctus_img, L.margin + 80 + 8, L.title_y + 12);
+    lv_obj_add_flag(idoctus_img, LV_OBJ_FLAG_HIDDEN);
 
     battery_img = lv_image_create(scr);
     lv_image_set_src(battery_img, &battery_dscs[0]);
@@ -466,12 +500,43 @@ void ui_update(const UsageData* data) {
 
     format_reset_time(data->weekly_reset_mins, buf, sizeof(buf));
     lv_label_set_text(lbl_weekly_reset, buf);
+
+    if (data->account[0]) {
+        lv_label_set_text(lbl_account, data->account);
+        if (strcmp(data->account, "iDoctus") == 0) {
+            lv_obj_clear_flag(idoctus_img, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(idoctus_img, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 void ui_tick_anim(void) {
     if (current_screen != SCREEN_USAGE) return;
 
     uint32_t now = lv_tick_get();
+
+    if (activity == ACTIVITY_IDLE) {
+        // Rotate idle messages slowly
+        if (now - idle_msg_start >= IDLE_MSG_MS) {
+            idle_msg_idx = (idle_msg_idx + 1) % IDLE_MSG_COUNT;
+            idle_msg_start = now;
+        }
+        static char ibuf[80];
+        snprintf(ibuf, sizeof(ibuf), "\xE2\x97\x8F %s", idle_messages[idle_msg_idx]);
+        lv_label_set_text(lbl_anim, ibuf);
+        lv_obj_set_style_text_color(lbl_anim, COL_DIM, 0);
+        return;
+    }
+
+    if (activity == ACTIVITY_WAITING) {
+        lv_label_set_text(lbl_anim, "\xE2\x8F\xB3 Waiting for input\xE2\x80\xA6");
+        lv_obj_set_style_text_color(lbl_anim, THEME_YELLOW, 0);
+        return;
+    }
+
+    // ACTIVITY_WORKING — original spinner + verb animation
+    lv_obj_set_style_text_color(lbl_anim, COL_ACCENT, 0);
 
     if (now - anim_msg_start >= ANIM_MSG_MS) {
         anim_msg_idx = (anim_msg_idx + 1) % ANIM_MSG_COUNT;
@@ -489,6 +554,15 @@ void ui_tick_anim(void) {
                  spinner_frames[anim_spinner_idx],
                  anim_messages[anim_msg_idx]);
         lv_label_set_text(lbl_anim, buf);
+    }
+}
+
+void ui_set_activity(activity_state_t state) {
+    activity = state;
+    // Reset idle message rotation when entering idle
+    if (state == ACTIVITY_IDLE) {
+        idle_msg_start = lv_tick_get();
+        idle_msg_idx = 0;
     }
 }
 
@@ -525,6 +599,9 @@ void ui_show_screen(screen_t screen) {
     if (logo_img) {
         if (screen == SCREEN_SPLASH) lv_obj_add_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
         else                          lv_obj_clear_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (idoctus_img) {
+        if (screen == SCREEN_SPLASH) lv_obj_add_flag(idoctus_img, LV_OBJ_FLAG_HIDDEN);
     }
 
     if (screen != SCREEN_SPLASH) prev_non_splash_screen = screen;

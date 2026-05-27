@@ -19,7 +19,15 @@ const char* ble_get_data(void);
 void ble_send_ack(void);
 void ble_send_nack(void);
 void ble_request_refresh(void);
+void ble_request_switch(void);
 
 // BLE HID keyboard
 void ble_keyboard_press(uint8_t key, uint8_t modifier);
 void ble_keyboard_release(void);
+
+// Event channel (daemon → device for sound/permission events)
+bool ble_has_event(void);
+const char* ble_get_event(void);
+
+// Permission response (device → daemon)
+void ble_send_permission_response(const char* response_json);

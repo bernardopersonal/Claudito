@@ -1,0 +1,41 @@
+{
+  "_comment": "Reference: hooks installed in ~/.claude/settings.json for Clawdmeter sounds",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/bernardo/Desktop/Clawdmeter/daemon/claude-hook.sh stop",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/bernardo/Desktop/Clawdmeter/daemon/claude-hook.sh notification",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/bernardo/Desktop/Clawdmeter/daemon/claude-hook.sh task_completed",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -10,6 +10,9 @@
 #define RX_CHAR_UUID        "4c41555a-4465-7669-6365-000000000002"  // host writes here
 #define TX_CHAR_UUID        "4c41555a-4465-7669-6365-000000000003"  // device ack/nack notifies
 #define REQ_CHAR_UUID       "4c41555a-4465-7669-6365-000000000004"  // device-initiated refresh request
+#define SWITCH_CHAR_UUID    "4c41555a-4465-7669-6365-000000000005"  // device-initiated account switch
+#define EVENT_CHAR_UUID     "4c41555a-4465-7669-6365-000000000006"  // host writes events (sounds/perms)
+#define PERM_RESP_CHAR_UUID "4c41555a-4465-7669-6365-000000000007"  // device notifies perm response
 
 #define BLE_BUF_SIZE 512
 
@@ -60,6 +63,9 @@ static NimBLECharacteristic* input_kbd = nullptr;
 static NimBLECharacteristic* tx_char = nullptr;
 static NimBLECharacteristic* rx_char = nullptr;
 static NimBLECharacteristic* req_char = nullptr;
+static NimBLECharacteristic* switch_char = nullptr;
+static NimBLECharacteristic* event_char = nullptr;
+static NimBLECharacteristic* perm_resp_char = nullptr;
 
 static ble_state_t state = BLE_STATE_INIT;
 static bool need_advertise = false;
@@ -67,6 +73,10 @@ static char rx_buf[BLE_BUF_SIZE];
 static volatile bool data_ready = false;
 static volatile bool has_received_data = false;
 static char mac_str[18];
+
+// Event channel (daemon → device for sound/permission events)
+static char event_buf[BLE_BUF_SIZE];
+static volatile bool event_ready = false;
 
 static void start_advertising() {
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
@@ -131,6 +141,17 @@ class RxCallbacks : public NimBLECharacteristicCallbacks {
         rx_buf[len] = '\0';
         data_ready = true;
         has_received_data = true;
+    }
+};
+
+class EventCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* chr, NimBLEConnInfo& info) override {
+        std::string val = chr->getValue();
+        size_t len = std::min(val.length(), (size_t)(BLE_BUF_SIZE - 1));
+        memcpy(event_buf, val.c_str(), len);
+        event_buf[len] = '\0';
+        event_ready = true;
+        Serial.printf("BLE: event received: %s\n", event_buf);
     }
 };
 
@@ -201,6 +222,23 @@ void ble_init(void) {
     static ReqCallbacks reqCb;
     req_char->setCallbacks(&reqCb);
 
+    switch_char = svc->createCharacteristic(
+        SWITCH_CHAR_UUID,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
+    event_char = svc->createCharacteristic(
+        EVENT_CHAR_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+    );
+    static EventCallbacks eventCb;
+    event_char->setCallbacks(&eventCb);
+
+    perm_resp_char = svc->createCharacteristic(
+        PERM_RESP_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+
     svc->start();
     server->start();
     start_advertising();
@@ -268,6 +306,15 @@ void ble_request_refresh(void) {
     }
 }
 
+void ble_request_switch(void) {
+    if (state == BLE_STATE_CONNECTED && switch_char) {
+        uint8_t v = 0x01;
+        switch_char->setValue(&v, 1);
+        switch_char->notify();
+        Serial.println("BLE: account switch requested");
+    }
+}
+
 void ble_keyboard_press(uint8_t key, uint8_t modifier) {
     if (state != BLE_STATE_CONNECTED || !input_kbd) return;
     // HID report: [modifier, reserved, key1, key2, key3, key4, key5, key6]
@@ -281,4 +328,21 @@ void ble_keyboard_release(void) {
     uint8_t report[8] = {0};
     input_kbd->setValue(report, sizeof(report));
     input_kbd->notify();
+}
+
+bool ble_has_event(void) {
+    return event_ready;
+}
+
+const char* ble_get_event(void) {
+    event_ready = false;
+    return event_buf;
+}
+
+void ble_send_permission_response(const char* response_json) {
+    if (state == BLE_STATE_CONNECTED && perm_resp_char) {
+        perm_resp_char->setValue(response_json);
+        perm_resp_char->notify();
+        Serial.printf("BLE: perm response sent: %s\n", response_json);
+    }
 }

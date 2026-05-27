@@ -7,6 +7,7 @@ struct UsageData {
     float weekly_pct;        // 7-day window utilization (0-100)
     int weekly_reset_mins;   // minutes until weekly resets
     char status[16];         // "allowed" or "limited"
+    char account[32];        // "iDoctus" or "Personal"
     bool ok;                 // data parse succeeded
     bool valid;              // false until first successful parse
 };
