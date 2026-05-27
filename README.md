@@ -137,11 +137,13 @@ The device boots into the splash and stays there until you press the middle (PWR
 
 ## Physical buttons
 
-| Button           | GPIO         | Function                                                       |
-| ---------------- | ------------ | -------------------------------------------------------------- |
-| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)       |
-| **Middle** (PWR) | AXP2101 PKEY | Cycle screens; on splash, cycle animations                     |
-| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)              |
+Buttons vary by board. The C6 has all three; the 1.8" only has Primary + PWR.
+
+| Button | C6 GPIO | 2.16 GPIO | 1.8 GPIO | Function |
+|--------|---------|-----------|----------|----------|
+| **Primary** (BOOT) | GPIO 9 | GPIO 0 | GPIO 0 | Send HID Space keystroke |
+| **PWR** (middle) | AXP PKEY | AXP PKEY | XCA9554 EXIO4 | Cycle screens; on splash, cycle animations |
+| **Secondary** (KEY) | GPIO 10 | GPIO 18 | — | Switch BLE account (toggles between configured accounts) |
 
 ## BLE protocol
 

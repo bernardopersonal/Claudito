@@ -523,7 +523,7 @@ void ui_tick_anim(void) {
             idle_msg_start = now;
         }
         static char ibuf[80];
-        snprintf(ibuf, sizeof(ibuf), "\xE2\x97\x8F %s", idle_messages[idle_msg_idx]);
+        snprintf(ibuf, sizeof(ibuf), "\xE2\x9C\xB6 %s", idle_messages[idle_msg_idx]);
         lv_label_set_text(lbl_anim, ibuf);
         lv_obj_set_style_text_color(lbl_anim, COL_DIM, 0);
         return;

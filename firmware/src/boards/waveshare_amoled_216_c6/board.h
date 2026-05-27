@@ -45,7 +45,7 @@
 // Three side-mounted buttons:
 //   BOOT (primary) — GPIO 9, sends Space (PTT) over BLE HID
 //   PWR  (cycle screens) — AXP2101 PKEY IRQ, handled in power.cpp
-//   KEY  (secondary) — GPIO 10, sends Shift+Tab (mode toggle) over BLE HID
+//   KEY  (secondary) — GPIO 10, triggers BLE account switch
 // KEY GPIO isn't documented by Waveshare; identified empirically by
 // scanning unused GPIOs at boot (see git history of board_init.cpp).
 #define BTN_BACK_GPIO        9
