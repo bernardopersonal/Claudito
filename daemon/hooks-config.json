@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/bernardo/Desktop/Clawdmeter/daemon/claude-hook.sh stop",
+            "command": "<path-to-claudito>/daemon/claude-hook.sh stop",
             "async": true
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/bernardo/Desktop/Clawdmeter/daemon/claude-hook.sh notification",
+            "command": "<path-to-claudito>/daemon/claude-hook.sh notification",
             "async": true
           }
         ]
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/bernardo/Desktop/Clawdmeter/daemon/claude-hook.sh task_completed",
+            "command": "<path-to-claudito>/daemon/claude-hook.sh task_completed",
             "async": true
           }
         ]
