@@ -440,7 +440,7 @@ async def connect_and_run(address: str, stop_event: asyncio.Event) -> bool:
                                     log(f"Activity: working (s% {prev_s}→{cur_s})")
                                 else:
                                     flat_polls[account_idx] = flat_polls.get(account_idx, 0) + 1
-                                    if flat_polls[account_idx] >= FLAT_THRESHOLD:
+                                    if flat_polls[account_idx] == FLAT_THRESHOLD:
                                         await session.send_event('{"ev":"stop"}')
                                         log(f"Activity: idle (s% flat at {cur_s} for {flat_polls[account_idx]} polls)")
                             prev_session_pct[account_idx] = cur_s
