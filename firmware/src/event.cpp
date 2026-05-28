@@ -67,7 +67,8 @@ static void btn_allow_cb(lv_event_t* e) {
         return;
     }
     sound_play(SND_STOP);
-    hid_tap(HID_KEY_ENTER);
+    // "Allow once" in Claude Code is Cmd+Enter (⌘↩)
+    hid_tap(HID_KEY_ENTER, 0x08);  // 0x08 = Left GUI (Cmd)
     dismiss_perm_dialog("allow_once");
 }
 
@@ -79,7 +80,7 @@ static void btn_always_cb(lv_event_t* e) {
         return;
     }
     sound_play(SND_STOP);
-    hid_tap(HID_KEY_TAB);
+    // "Allow for this task" in Claude Code is Enter (↩) — the default focused button
     hid_tap(HID_KEY_ENTER);
     dismiss_perm_dialog("allow_always");
 }
