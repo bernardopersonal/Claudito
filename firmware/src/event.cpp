@@ -18,6 +18,7 @@ LV_FONT_DECLARE(font_styrene_14);
 
 // ---- Permission dialog state ----
 static bool perm_active = false;
+static bool perm_stale = false;  // true once a non-perm event arrives → permission was handled on host
 static lv_obj_t* perm_overlay = nullptr;
 static lv_obj_t* perm_panel = nullptr;
 static lv_obj_t* perm_lbl_title = nullptr;
@@ -60,16 +61,24 @@ static void hid_tap(uint8_t key, uint8_t modifier = 0) {
 
 static void btn_allow_cb(lv_event_t* e) {
     (void)e;
+    if (perm_stale) {
+        Serial.println("Event: allow tapped but permission already handled on host — no HID");
+        dismiss_perm_dialog("stale");
+        return;
+    }
     sound_play(SND_STOP);
-    // Claude Code permission prompt: Enter accepts the focused option (Allow)
     hid_tap(HID_KEY_ENTER);
     dismiss_perm_dialog("allow_once");
 }
 
 static void btn_always_cb(lv_event_t* e) {
     (void)e;
+    if (perm_stale) {
+        Serial.println("Event: always tapped but permission already handled on host — no HID");
+        dismiss_perm_dialog("stale");
+        return;
+    }
     sound_play(SND_STOP);
-    // Tab to "Always" option, then Enter to select
     hid_tap(HID_KEY_TAB);
     hid_tap(HID_KEY_ENTER);
     dismiss_perm_dialog("allow_always");
@@ -77,8 +86,12 @@ static void btn_always_cb(lv_event_t* e) {
 
 static void btn_deny_cb(lv_event_t* e) {
     (void)e;
+    if (perm_stale) {
+        Serial.println("Event: deny tapped but permission already handled on host — no HID");
+        dismiss_perm_dialog("stale");
+        return;
+    }
     sound_play(SND_STOP_FAILURE);
-    // Escape dismisses / denies the permission
     hid_tap(HID_KEY_ESCAPE);
     dismiss_perm_dialog("deny");
 }
@@ -179,6 +192,7 @@ static void show_permission_dialog(const char* tool, const char* cmd) {
     perm_btn_deny   = make_btn("Deny",   THEME_RED,   btn_deny_cb);
 
     perm_active = true;
+    perm_stale = false;
     perm_show_ms = millis();
     Serial.printf("Event: permission dialog shown (tool=%s)\n", tool);
 }
@@ -193,6 +207,14 @@ static void dispatch_event(const char* json) {
     }
 
     const char* ev = doc["ev"] | "";
+
+    // Any non-permission event means the user already acted on the Mac —
+    // mark dialog stale so device buttons won't send HID keystrokes, then dismiss.
+    if (perm_active && strcmp(ev, "perm") != 0 && strcmp(ev, "pprompt") != 0) {
+        Serial.println("Event: permission dismissed (handled on host)");
+        perm_stale = true;
+        dismiss_perm_dialog("host");
+    }
 
     if (strcmp(ev, "stop") == 0) {
         sound_play(SND_STOP);

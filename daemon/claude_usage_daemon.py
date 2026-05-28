@@ -402,6 +402,10 @@ async def connect_and_run(address: str, stop_event: asyncio.Event) -> bool:
     account_idx = 0
     last_poll = 0.0
     used_successfully = False
+    # Activity inference: track session % per account to detect working/idle
+    prev_session_pct: dict[int, int | None] = {}  # account_idx -> last seen s%
+    flat_polls: dict[int, int] = {}  # account_idx -> consecutive unchanged polls
+    FLAT_THRESHOLD = 2  # polls with same s% before inferring idle
     try:
         while client.is_connected and not stop_event.is_set():
             if session.switch_requested.is_set():
@@ -425,6 +429,21 @@ async def connect_and_run(address: str, stop_event: asyncio.Event) -> bool:
                         if await session.write_payload(payload):
                             last_poll = time.time()
                             used_successfully = True
+
+                            # --- Activity inference from usage delta ---
+                            cur_s = payload.get("s")
+                            prev_s = prev_session_pct.get(account_idx)
+                            if prev_s is not None and cur_s is not None:
+                                if cur_s != prev_s:
+                                    flat_polls[account_idx] = 0
+                                    await session.send_event('{"ev":"working"}')
+                                    log(f"Activity: working (s% {prev_s}→{cur_s})")
+                                else:
+                                    flat_polls[account_idx] = flat_polls.get(account_idx, 0) + 1
+                                    if flat_polls[account_idx] >= FLAT_THRESHOLD:
+                                        await session.send_event('{"ev":"stop"}')
+                                        log(f"Activity: idle (s% flat at {cur_s} for {flat_polls[account_idx]} polls)")
+                            prev_session_pct[account_idx] = cur_s
 
             try:
                 done, _ = await asyncio.wait(
