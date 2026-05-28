@@ -161,9 +161,21 @@ Custom GATT service alongside standard HID keyboard:
 
 The last two are new in this fork.
 
+## Compatibility
+
+Hooks-based features (sounds, permission dialog, activity state) depend on Claude Code CLI hooks. Not all Claude products fire them:
+
+| Product | Usage % | Working/idle | Sounds | Permission dialog |
+|---------|---------|-------------|--------|-------------------|
+| **Claude Code CLI** | ✅ polling | ✅ hooks + polling fallback | ✅ hooks | ✅ hooks |
+| **Cowork** | ✅ polling | ✅ polling inference only | ❌ | ❌ |
+| **Claude Chat (desktop)** | ✅ polling | ✅ polling inference only | ❌ | ❌ |
+
+For Cowork and Chat, the daemon infers working/idle from session % changes between polls (~60s granularity). Hooks give near-instant feedback in Claude Code CLI.
+
 ## Known issues
 
-- Permission HID keys (Enter/Tab+Enter/Escape) require the Claude Code window to have focus on the Mac
+- Permission HID keys (Enter/Tab+Enter/Escape) require the Claude Code window to have focus on the Mac. If the permission was already handled on the computer, device buttons dismiss the dialog silently without sending keystrokes
 - `sound_data.h` is ~1 MB — consider `.gitignore`-ing it and regenerating from WAVs
 - macOS may cache stale GATT characteristics after firmware changes — temporarily add `NimBLEDevice::deleteAllBonds()` in `ble_init()`, reflash, reconnect, then remove it
 
